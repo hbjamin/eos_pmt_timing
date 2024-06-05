@@ -8,45 +8,6 @@ from matplotlob
 
 ##########################################################################
 pmt_info_csv='/nfs/disk4/bharris/eos/eos_pmt_timing/pmt_info.csv'
-#r11780_filelist=['/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0096/data.root',
-#         '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0057/data.root',
-#         '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0141/data.root',
-#         '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0092/data.root',
-#         '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0102/data.root',
-#         '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0134/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0112/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0110/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0104/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0097/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0101/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0116/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0138/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0099/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0064/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0137/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0133/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/na0111/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0108/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0062/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0103/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0072/data.root',
-#             '/Users/benharris/penn/eos/eos_pmt_waveforms/r11780/zn0109/data.root']
-###########################################################################
-#r7081_filelist=['/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/zt0075/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/zq0044/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/ma9032/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/ma9028/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/zq0037/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/ma9027/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/ma9030/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/ma9029/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/ma0085/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/ma9031/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/zt0069/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/ma0516/data.root']
-
-#r7081_filelist=['/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/zt0075/data.root',
-#                '/Users/benharris/penn/eos/eos_pmt_waveforms/r7081/zq0044/data.root']
 ##########################################################################
 # Hardcoded global variables that set the timing scale and window of the PDF
 raw_starttime=0 #ns

@@ -4,7 +4,7 @@ import argparse
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
-from matplotlob 
+import matplotlib.pyplot as plt
 
 ##########################################################################
 pmt_info_csv='/nfs/disk4/bharris/eos/eos_pmt_timing/pmt_info.csv'
@@ -125,9 +125,6 @@ def averageWithNearestNeighbors(time,data,start_time,end_time):
 
 def main():
 
-    total_counts=np.zeros(int((final_endtime-final_starttime)/timing_res))
-    total_time=np.zeros(int((final_endtime-final_starttime)/timing_res))
-    
     fields=['serial','type','test_id','gain','path']
     df=pd.read_csv(pmt_info_csv,names=fields,index_col=False)
     #print(df)
@@ -141,11 +138,13 @@ def main():
     r7081_files=[]
     r11780_files=[]
 
+    # Initial loop to sort file paths
     for i in range(len(df)):
 
         dir='/nfs/disk4/bharris/eos/eos_pmt_timing/berkeley_darkbox_pmt_data/'
         file = dir+df['path'][i]
 
+        # Should store in a vector for easy iteration
         if (df['type'][i]=='R14688'):
             r14688_files.append(file)
         elif(df['type'][i]=='R7081'):
@@ -159,6 +158,11 @@ def main():
         #print('Test #:',df['test_id'][i])
         #print('Gain:',df['gain'][i])
         #print('Filepath:',df['path'][i])
+
+    # Second loop to make plots
+    # Need one of these for each pmt type
+    total_counts=np.zeros(int((final_endtime-final_starttime)/timing_res))
+    total_time=np.zeros(int((final_endtime-final_starttime)/timing_res))
 
         if os.path.exists(file):
             print('Opening file:',file)

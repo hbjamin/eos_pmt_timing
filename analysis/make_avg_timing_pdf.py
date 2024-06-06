@@ -6,23 +6,11 @@ import pandas as pd
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
-##########################################################################
-pmt_info_csv='/nfs/disk4/bharris/eos/eos_pmt_timing/pmt_info.csv'
-##########################################################################
-# Hardcoded global variables that set the timing scale and window of the PDF
-raw_starttime=0 #ns
-raw_endtime=160 #ns
-timing_res=0.1 #ns
-final_starttime=-20 #ns
-final_endtime=80 #ns
-nbins=int((raw_endtime-raw_starttime)/timing_res)
-##########################################################################
-
 def normalizePDF(data):
         sum=0
         for i in range(len(data)):
                 sum+=data[i]
-        data=data/sum
+        data=data/sum/timing_res
         return data
 
 def getMaxIndex(data):
@@ -123,34 +111,43 @@ def averageWithNearestNeighbors(time,data,start_time,end_time):
 #   print('final',final_sum)
     return new_data
 
-def main():
+# Global variables
+timing_res=0.1 #ns
 
+def main():
+    
+    # Hardcoded global variables for resolution and domain of pmt timing pdf
+    raw_starttime=0 #ns
+    raw_endtime=160 #ns
+    final_starttime=-20 #ns
+    final_endtime=80 #ns
+    nbins=int((raw_endtime-raw_starttime)/timing_res)
+
+    # Vectors to store all of the results for a given pmt type. Used to create average timing pdf across desired timing domain
+    rows=3 # 0=R14688, 1=R7081, 2=R11780
+    cols=int((final_endtime-final_starttime)/timing_res) 
+    total_counts=np.zeros((rows,cols))
+    total_time=np.zeros((rows,cols))
+
+    # Use csv file to create dataframe
+    pmt_info_csv='/nfs/disk4/bharris/eos/eos_pmt_timing/pmt_info.csv'
     fields=['serial','type','test_id','gain','path']
     df=pd.read_csv(pmt_info_csv,names=fields,index_col=False)
-    #print(df)
-    
-    #parser=argparse.ArgumentParser()
-    #parser.add_argument('PMTtype')
-    #args=parser.parse_args()
-    #type=args.PMTtype
 
-    r14688_files=[]
-    r7081_files=[]
-    r11780_files=[]
-
-    # Initial loop to sort file paths
+    # Loop through dataframe and sort paths
+    #r14688_files=[]
+    #r7081_files=[]
+    #r11780_files=[]
     for i in range(len(df)):
-
         dir='/nfs/disk4/bharris/eos/eos_pmt_timing/berkeley_darkbox_pmt_data/'
         file = dir+df['path'][i]
-
-        # Should store in a vector for easy iteration
-        if (df['type'][i]=='R14688'):
-            r14688_files.append(file)
-        elif(df['type'][i]=='R7081'):
-            r7081_files.append(file)
-        elif(df['type'][i]=='R11780'):
-            r11780_files.append(file)
+        
+        #if (df['type'][i]=='R14688'):
+        #    r14688_files.append(file)
+        #elif(df['type'][i]=='R7081'):
+        #    r7081_files.append(file)
+        #elif(df['type'][i]=='R11780'):
+        #    r11780_files.append(file)
 
         #print('******************')
         #print('Serial #:',df['serial'][i])
@@ -159,13 +156,22 @@ def main():
         #print('Gain:',df['gain'][i])
         #print('Filepath:',df['path'][i])
 
+    #parser=argparse.ArgumentParser()
+    #parser.add_argument('PMTtype')
+    #args=parser.parse_args()
+    #type=args.PMTtype
+
     # Second loop to make plots
     # Need one of these for each pmt type
-    total_counts=np.zeros(int((final_endtime-final_starttime)/timing_res))
-    total_time=np.zeros(int((final_endtime-final_starttime)/timing_res))
+    #total_counts=np.zeros(int((final_endtime-final_starttime)/timing_res))
+    #total_time=np.zeros(int((final_endtime-final_starttime)/timing_res))
 
         if os.path.exists(file):
             print('Opening file:',file)
+            print('Serial #:',df['serial'][i])
+            print('Type:',df['type'][i])
+            print('Test #:',df['test_id'][i])
+            print('Gain:',df['gain'][i])
             with uproot.open(file) as f:
                 
                 # Get ROOT file
@@ -215,65 +221,74 @@ def main():
                 counts=normalizePDF(counts)
                 #counts=counts.tolist() 
                 
+                # Check pmt type (default is R14688)
+                pmt_type=0
+                if (df['type'][i]=='R7081'):
+                    pmt_type=1     
+                elif(df['type'][i]=='R11780'):
+                    pmt_type=2
+
                 for i in range(len(counts)):
-                    total_counts[i]+=counts[i]
-                    total_time[i]=time[i]
+                    total_counts[pmt_type][i]+=counts[i]
+                    total_time[pmt_type][i]=time[i]
+                
         else:
             print('Cannot find:',file)     
     
-    #print('total_counts',total_counts)
-    # Fit peak to gaussian to get TTS sigma and plot to 3sigma
-    #fit_start_time=-10
-    #fit_end_time=10
-    #nbins_fit=int((fit_end_time-fit_start_time)/timing_res)
-    #counts,bin_edges=np.histogram(total_counts,bins=nbins_fit,range=(fit_start_time,fit_end_time))
-    #fit_time=(bin_edges[:-1]+bin_edges[1:])/2
-    #print('counts',counts)
-    fit_time=[]
-    fit_counts=[]
-    for i in range(int(40/timing_res)):
-        fit_time.append(-20+i*timing_res)
-        fit_counts.append(total_counts[i])
-    
-    #print(len(fit_time),'fit time',fit_time)
-    #print(len(fit_counts),'fit counts',fit_counts)
-    params,covariance=fitPeakToGaussian(fit_time,fit_counts)
-    errors=np.sqrt(np.diag(covariance))
-    A=params[0]
-    B=params[1]
-    C=params[2]
-    A_err=errors[0]
-    B_err=errors[1]
-    C_err=errors[2]
-    print('Fit a TTS sigma of',round(C,4),'+/-',round(C_err,4))
-    x_fit=np.linspace(B-2*C,B+2*C,100)
-    y_fit=gaussian(x_fit,A,B,C)
-    plt.figure(1)
-    plt.plot(fit_time,fit_counts)
-    plt.plot(x_fit,y_fit,color='red')
-    plt.xlabel('deltat [ns]')
-    plt.ylabel('Pulses/ns')
-    plt.yscale('log')
-    
-    # Normalize PDF
-    prob=normalizePDF(total_counts)
-    total=0
-    for i in range(len(prob)):
-        total+=prob[i]
-    print('Sum of probability after normalization is:',total)
-    ratio=getLatePulsing(total_time,total_counts,5*C)
-    prob=prob.tolist()
-    total_time=total_time.tolist()
-    print('time :',total_time)
-    print('time_prob :',prob)
-    plt.figure(3)
-    plt.plot(total_time,prob)
-    plt.yscale('log')
-    plt.xlabel('Time [ns]')
-    plt.ylabel('Probability')
-    plt.ylim(2e-5,5e-2)
-    plt.xlim(-50,150)
-    plt.grid()
+    for i in range(3):
+
+        #print('total_counts',total_counts)
+        # Fit peak to gaussian to get TTS sigma and plot to 3sigma
+        #fit_start_time=-10
+        #fit_end_time=10
+        #nbins_fit=int((fit_end_time-fit_start_time)/timing_res)
+        #counts,bin_edges=np.histogram(total_counts,bins=nbins_fit,range=(fit_start_time,fit_end_time))
+        #fit_time=(bin_edges[:-1]+bin_edges[1:])/2
+        #print('counts',counts)
+        fit_time=[]
+        fit_counts=[]
+        for j in range(int(40/timing_res)):
+            fit_time.append(-20+j*timing_res)
+            fit_counts.append(total_counts[i][j])
+        
+        #print(len(fit_time),'fit time',fit_time)
+        #print(len(fit_counts),'fit counts',fit_counts)
+        params,covariance=fitPeakToGaussian(fit_time,fit_counts)
+        errors=np.sqrt(np.diag(covariance))
+        A=params[0]
+        B=params[1]
+        C=params[2]
+        A_err=errors[0]
+        B_err=errors[1]
+        C_err=errors[2]
+        print('Fit a TTS sigma of',round(C,4),'+/-',round(C_err,4))
+        x_fit=np.linspace(B-2*C,B+2*C,100)
+        y_fit=gaussian(x_fit,A,B,C)
+        plt.figure(int(i*2+1))
+        plt.plot(fit_time,fit_counts)
+        plt.plot(x_fit,y_fit,color='red')
+        plt.xlabel('deltat [ns]')
+        plt.ylabel('Pulses/ns')
+        plt.yscale('log')
+        
+        # Normalize PDF
+        prob=normalizePDF(total_counts[i])
+        total=0
+        for j in range(len(prob)):
+            total+=prob[j]
+        print('Sum of probability after normalization is:',total)
+        ratio=getLatePulsing(total_time[i],total_counts[i],5*C)
+        prob=prob.tolist()
+        total_time[i]=total_time[i].tolist()
+        print('time :',total_time[i])
+        print('time_prob :',prob)
+        plt.figure(int(i*2+2))
+        plt.plot(total_time[i],prob)
+        plt.yscale('log')
+        plt.xlabel('Time [ns]')
+        plt.ylabel('Probability')
+        plt.xlim(-20,80)
+        plt.grid()
     plt.show()
 
 if __name__ == '__main__':

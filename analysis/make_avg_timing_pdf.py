@@ -1,4 +1,5 @@
 import os
+import math
 import uproot
 import argparse
 import numpy as np
@@ -6,284 +7,197 @@ import pandas as pd
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
-def normalizePDF(data):
-        sum=0
-        for i in range(len(data)):
-                sum+=data[i]
-        data=data/sum/timing_res
-        return data
+# Normalize probability by area
+def normalize(prob,dt):
+        tot=0
+        for i in range(len(prob)):
+                tot+=prob[i]
+        prob=prob/tot/dt
+        return prob
 
-def getMaxIndex(data):
-        max=0
-        max_index=0
-        for i in range(len(data)):
-                if data[i]>max:
-                        max=data[i]
-                        max_index=i
-        return max_index
+# Return index with largest probability
+def getMaxIndex(prob):
+        val=0
+        max_i=0
+        for i in range(len(prob)):
+                if prob[i]>val:
+                        val=prob[i]
+                        max_i=i
+        return max_i
 
-def recenter(data,max_index,final_starttime,final_endtime):
+# Define time domain of pdf and recenter it so that largest probability is at 0 ns
+def recenter(prob,max_i,time_domain,dt):
         new_time=[]
-        new_data=[]
-        counter=0
-        for i in range(len(data)):
-                if i>=max_index+final_starttime/timing_res and i<max_index+final_endtime/timing_res:
-                        new_data.append(data[i])
-                        new_time.append(round(final_starttime+timing_res*counter,1))
-                        counter+=1
-        return new_time,new_data
+        new_prob=[]
+        n=0
+        for i in range(len(prob)):
+                if i>=max_i+time_domain[0]/dt and i<max_i+time_domain[1]/dt:
+                        new_prob.append(prob[i])
+                        new_time.append(round(time_domain[0]+dt*n,1))
+                        n+=1
+        new_prob=normalize(new_prob,dt)
+        return new_time,new_prob
 
-def subtractPedestal(time,data,ped_start_time,ped_end_time):
+# Remove dark pulsing pedestal
+def subtractPedestal(time,prob,ped_start_time,ped_end_time):
         ped=0
-        counts=0
+        n=0
         for i in range(len(time)):
                 if time[i]>=ped_start_time and time[i]<=ped_end_time:
-                        ped+=data[i]
-                        counts+=1
-        ped=ped/counts
-        print('Pedestal:',ped)
-        for i in range(len(data)):
-                data[i]=data[i]-ped
-                if data[i]<0:
-                        data[i]=0
-        return data
+                        ped+=prob[i]
+                        n+=1
+        ped=ped/n
+        # Don't allow negative probability
+        for i in range(len(prob)):
+                prob[i]=prob[i]-ped
+                if prob[i]<0:
+                        prob[i]=0
+        return prob
 
-def gaussian(x,A,B,C):
-    return A*np.exp(-((x-B)**2)/(2*C**2))
+def gaussian(t,A,mu,sigma):
+    return A*np.exp(-((t-mu)**2)/(2*sigma**2))
 
-def fitPeakToGaussian(time,data):
-    max_index=getMaxIndex(data)
-    A_guess=data[max_index]
-    B_guess=time[max_index]
-    C_guess=1
+def fitPeakToGaussian(time,prob,dt):
+    max_i=getMaxIndex(prob)
+    A_guess=prob[max_i]
+    mu_guess=time[max_i]
+    sigma_guess=1
     fit_time=[]
-    fit_data=[]
-    for i in range(len(data)):
-        if i>max_index-2*C_guess/timing_res and i<max_index+2*C_guess/timing_res:
+    fit_prob=[]
+    for i in range(len(prob)):
+        if i>max_i-2*sigma_guess/dt and i<max_i+2*sigma_guess/dt:
             fit_time.append(time[i])
-            fit_data.append(data[i])
-    params,covariance=curve_fit(gaussian,fit_time,fit_data,p0=[A_guess,B_guess,C_guess])
+            fit_prob.append(prob[i])
+    params,covariance=curve_fit(gaussian,fit_time,fit_prob,p0=[A_guess,mu_guess,sigma_guess])
     return params,covariance
 
-def getLatePulsing(time,data,time_cut):
+# Return fraction of probability after cuttoff time
+def getLatePulsing(time,prob,cutoff_time):
     early=0
-    early_count=0
     late=0
-    late_count=0
-    for i in range(len(data)):
-        if time[i]<time_cut:
-            early+=data[i]
-            early_count+=1
+    for i in range(len(prob)):
+        if time[i]<cutoff_time:
+            early+=prob[i]
         else:
-            late+=data[i]
-            late_count+=1
-#   early=early/early_count
-#   late=late/late_count
+            late+=prob[i]
     fraction = late/(early+late)
-    print('Late Ratio:',round(100*fraction,2))
     return fraction
 
-def averageWithNearestNeighbors(time,data,start_time,end_time):
-#   print('Smoothing from',start_time,'to',end_time)
-    old_sum=0
-    for i in range(len(data)):
+# Smooth section of pdf by averaging with n nearest neightbors to the left and right (should probably be done by convoling with a gaussian instead)
+def averageWithNearestNeighbors(time,prob,start_time,end_time,n):
+    tot=0
+    for i in range(len(prob)):
         if time[i]>=start_time and time[i]<=end_time:
-            old_sum+=data[i]
-    new_sum=0
-    new_data=[]
-    for i in range(len(data)):
+            tot+=prob[i]
+    new_tot=0
+    new_prob=[]
+    for i in range(len(prob)):
         if time[i]>=start_time and time[i]<=end_time:
-            new_data.append((data[i-7]+data[i-6]+data[i-5]+data[i-4]+data[i-3]+data[i-2]+data[i-1]+data[i]+data[i+1]+data[i+2]+data[i+3]+data[i+4]+data[i+5]+data[i+6]+data[i+7])/15)
-            #new_data.append((data[i-3]+data[i-2]+data[i-1]+data[i]+data[i+1]+data[i+2]+data[i+3])/7)
-            #new_data.append((data[i-2]+data[i-1]+data[i]+data[i+1]+data[i+2])/5)
-            #new_data.append((data[i-1]+data[i]+data[i+1])/3)
-            new_sum+=new_data[-1]
+            avg=0
+            for j in range(2*n+1):
+                avg+=prob[i-n+j]/(2*n+1)
+            new_prob.append(avg)
+            #new_prob.append((prob[i-7]+prob[i-6]+prob[i-5]+prob[i-4]+prob[i-3]+prob[i-2]+prob[i-1]+prob[i]+prob[i+1]+prob[i+2]+prob[i+3]+prob[i+4]+prob[i+5]+prob[i+6]+prob[i+7])/15)
+            new_tot+=new_prob[-1]
         else:
-            new_data.append(data[i])
-#   print('old:',old_sum)
-#   print('new:',new_sum)
-#   print(len(data),len(new_data))
-    final_sum=0
-    for i in range(len(data)):
+            new_prob.append(prob[i])
+    final_tot=0
+    for i in range(len(prob)):
         if time[i]>=start_time and time[i]<=end_time:
-            new_data[i]=new_data[i]*old_sum/new_sum
-            final_sum+=new_data[i]
-#   print('final',final_sum)
-    return new_data
-
-# Global variables
-timing_res=0.1 #ns
+            new_prob[i]=new_prob[i]*tot/new_tot
+            final_tot+=new_prob[i]
+    return new_prob
 
 def main():
     
-    # Hardcoded global variables for resolution and domain of pmt timing pdf
-    raw_starttime=0 #ns
-    raw_endtime=160 #ns
-    final_starttime=-20 #ns
-    final_endtime=80 #ns
-    nbins=int((raw_endtime-raw_starttime)/timing_res)
+    # Hardcoded variables for timing resolution and domain of pdf
+    dt=0.1 # timing resolution in ns
+    old_time_domain=[0,160] # ns
+    new_time_domain=[-20,80] # ns
+    nbins=int((old_time_domain[1]-old_time_domain[0])/dt)
 
     # Vectors to store all of the results for a given pmt type. Used to create average timing pdf across desired timing domain
-    rows=3 # 0=R14688, 1=R7081, 2=R11780
-    cols=int((final_endtime-final_starttime)/timing_res) 
-    total_counts=np.zeros((rows,cols))
-    total_time=np.zeros((rows,cols))
-
-    # Use csv file to create dataframe
-    pmt_info_csv='/nfs/disk4/bharris/eos/eos_pmt_timing/pmt_info.csv'
+    pmt_type=['R14688','R7081','R11780']
+    cols=int((new_time_domain[1]-new_time_domain[0])/dt) 
+    total_counts=np.zeros((len(pmt_type),cols))
+    total_time=np.zeros((len(pmt_type),cols))
+    
+    # Get the information about each pmt's final test 
     fields=['serial','type','test_id','gain','path']
-    df=pd.read_csv(pmt_info_csv,names=fields,index_col=False)
+    df=pd.read_csv('../pmt_final_test_info.csv',names=fields,index_col=False)
 
-    # Loop through dataframe and sort paths
-    #r14688_files=[]
-    #r7081_files=[]
-    #r11780_files=[]
+    # Loop through all the final test root files (created by analyzing raw h5 files)
     for i in range(len(df)):
         dir='/nfs/disk4/bharris/eos/eos_pmt_timing/berkeley_darkbox_pmt_data/'
         file = dir+df['path'][i]
-        
-        #if (df['type'][i]=='R14688'):
-        #    r14688_files.append(file)
-        #elif(df['type'][i]=='R7081'):
-        #    r7081_files.append(file)
-        #elif(df['type'][i]=='R11780'):
-        #    r11780_files.append(file)
-
-        #print('******************')
-        #print('Serial #:',df['serial'][i])
-        #print('Type:',df['type'][i])
-        #print('Test #:',df['test_id'][i])
-        #print('Gain:',df['gain'][i])
-        #print('Filepath:',df['path'][i])
-
-    #parser=argparse.ArgumentParser()
-    #parser.add_argument('PMTtype')
-    #args=parser.parse_args()
-    #type=args.PMTtype
-
-    # Second loop to make plots
-    # Need one of these for each pmt type
-    #total_counts=np.zeros(int((final_endtime-final_starttime)/timing_res))
-    #total_time=np.zeros(int((final_endtime-final_starttime)/timing_res))
-
         if os.path.exists(file):
-            print('Opening file:',file)
-            print('Serial #:',df['serial'][i])
-            print('Type:',df['type'][i])
-            print('Test #:',df['test_id'][i])
-            print('Gain:',df['gain'][i])
             with uproot.open(file) as f:
-                
-                # Get ROOT file
-                hist=f['time']   
-            
-                # Fit peak to gaussian to get TTS sigma and plot to 3sigma
+                # Get the delta t histogram
+                hist=f['time']
+                # Fit the peak to a gaussian
                 counts=hist.counts()
                 bin_edges=hist.axes[0].edges()
                 time=(bin_edges[:-1]+bin_edges[1:])/2
-                params,covariance=fitPeakToGaussian(time,counts)
+                params,covariance=fitPeakToGaussian(time,counts,dt)
                 errors=np.sqrt(np.diag(covariance))
-                A=params[0]
-                B=params[1]
-                C=params[2]
-                A_err=errors[0]
-                B_err=errors[1]
-                C_err=errors[2] 
-            
-                print('Fit a TTS sigma of',round(C,3),'+/-',round(C_err,3))
-                #x_fit=np.linspace(B-2*C,B+2*C,100)
-                #y_fit=gaussian(x_fit,A,B,C)
-                #plt.figure(1)
-                #plt.plot(time,counts)
-                #plt.plot(x_fit,y_fit,color='red')
-                #plt.xlabel('deltat [ns]')
-                #plt.ylabel('Pulses/ns')
-                
-                # Get nhits at every deltat to make a PDF
-                #plt.figure(2)
-                #plt.plot(time,counts)
-                #plt.yscale('log')
-                #plt.xlabel('deltat [ns]')
-                #plt.ylabel('Pulses/ns')    
-                
+                sigma=params[2]
+                sigma_err=errors[2]
                 max_index=getMaxIndex(counts)
-                # Smooth out late pulsing
-                counts=averageWithNearestNeighbors(time,counts,time[max_index]+5*C,time[-10])       
-                # Smooth out pre pulsing
-                counts=averageWithNearestNeighbors(time,counts,time[10],time[max_index]-3*C)
-                # Subtract pedestal
+                # Smooth out late pulsing (pulses after 5 sigma of prompt peak)
+                counts=averageWithNearestNeighbors(time,counts,time[max_index]+5*sigma,time[-10],7)       
+                # Smooth out pre pulsing (pulses before 3 sigma of promt peak)
+                counts=averageWithNearestNeighbors(time,counts,time[10],time[max_index]-3*sigma,7)
+                # Subtract pedestal (average counts between 0 and 30 ns)
                 counts=subtractPedestal(time,counts,0,30)   
-            
-                # Center prompt peak at 0 and shorten window 
-                time,counts=recenter(counts,max_index,final_starttime,final_endtime)
-                ratio=getLatePulsing(time,counts,5*C)
-            
-                counts=normalizePDF(counts)
-                #counts=counts.tolist() 
-                
-                # Check pmt type (default is R14688)
-                pmt_type=0
+                # Center prompt peak at 0 ns
+                time,counts=recenter(counts,max_index,new_time_domain,dt)
+                ratio=getLatePulsing(time,counts,5*sigma)
+                # Get the pmt type
+                current_pmt_type=0
                 if (df['type'][i]=='R7081'):
-                    pmt_type=1     
+                    current_pmt_type=1     
                 elif(df['type'][i]=='R11780'):
-                    pmt_type=2
-
+                    current_pmt_type=2
+                print('Seial:',df['serial'][i],'--- Type:',df['type'][i],'--- TTS sigma:',round(sigma,2),'+/-',round(sigma_err,2),'--- TTS FWHM:',round(2*sigma*math.sqrt(2*math.log(2)),2),'+/-',round(2*sigma_err*math.sqrt(2*math.log(2)),2),'--- Late Ratio:',round(100*ratio,2),'%')
+                # Add results to vector for each pmt type
                 for i in range(len(counts)):
-                    total_counts[pmt_type][i]+=counts[i]
-                    total_time[pmt_type][i]=time[i]
-                
+                    total_counts[current_pmt_type][i]+=counts[i]
+                    total_time[current_pmt_type][i]=time[i]
         else:
             print('Cannot find:',file)     
-    
-    for i in range(3):
-
-        #print('total_counts',total_counts)
-        # Fit peak to gaussian to get TTS sigma and plot to 3sigma
-        #fit_start_time=-10
-        #fit_end_time=10
-        #nbins_fit=int((fit_end_time-fit_start_time)/timing_res)
-        #counts,bin_edges=np.histogram(total_counts,bins=nbins_fit,range=(fit_start_time,fit_end_time))
-        #fit_time=(bin_edges[:-1]+bin_edges[1:])/2
-        #print('counts',counts)
-        fit_time=[]
-        fit_counts=[]
-        for j in range(int(40/timing_res)):
-            fit_time.append(-20+j*timing_res)
-            fit_counts.append(total_counts[i][j])
-        
-        #print(len(fit_time),'fit time',fit_time)
-        #print(len(fit_counts),'fit counts',fit_counts)
-        params,covariance=fitPeakToGaussian(fit_time,fit_counts)
+    # For every pmt type
+    for i in range(len(pmt_type)):  
+        print('Average',pmt_type[i],'timing pdf')
+        # Fit the peak to a gaussian
+        params,covariance=fitPeakToGaussian(total_time[i],total_counts[i],dt)
         errors=np.sqrt(np.diag(covariance))
         A=params[0]
-        B=params[1]
-        C=params[2]
-        A_err=errors[0]
-        B_err=errors[1]
-        C_err=errors[2]
-        print('Fit a TTS sigma of',round(C,4),'+/-',round(C_err,4))
-        x_fit=np.linspace(B-2*C,B+2*C,100)
-        y_fit=gaussian(x_fit,A,B,C)
+        mu=params[1]
+        sigma=params[2]
+        sigma_err=errors[2]
+        print('Fit a TTS sigma of',round(sigma,4),'+/-',round(sigma_err,4))
+        x_fit=np.linspace(mu-2*sigma,mu+2*sigma,100)
+        y_fit=gaussian(x_fit,A,mu,sigma)
         plt.figure(int(i*2+1))
-        plt.plot(fit_time,fit_counts)
+        plt.plot(total_time[i][int(15/dt):int(25/dt)],total_counts[i][int(15/dt):int(25/dt)])
         plt.plot(x_fit,y_fit,color='red')
         plt.xlabel('deltat [ns]')
         plt.ylabel('Pulses/ns')
-        plt.yscale('log')
-        
+        plt.title(pmt_type[i])
         # Normalize PDF
-        prob=normalizePDF(total_counts[i])
+        prob=normalize(total_counts[i],dt)
         total=0
         for j in range(len(prob)):
-            total+=prob[j]
+            total+=prob[j]*dt
         print('Sum of probability after normalization is:',total)
-        ratio=getLatePulsing(total_time[i],total_counts[i],5*C)
+        ratio=getLatePulsing(total_time[i],total_counts[i],5*sigma)
+        print('Late Ratio is:',100*ratio,'percent')
         prob=prob.tolist()
-        total_time[i]=total_time[i].tolist()
-        print('time :',total_time[i])
+        time=total_time[i].tolist()
+        print('time :',time)
         print('time_prob :',prob)
         plt.figure(int(i*2+2))
-        plt.plot(total_time[i],prob)
+        plt.plot(time,prob)
         plt.yscale('log')
         plt.xlabel('Time [ns]')
         plt.ylabel('Probability')
